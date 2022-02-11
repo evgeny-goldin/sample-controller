@@ -1,0 +1,15 @@
+apiVersion: samplecontroller.k8s.io/v1alpha1
+kind: Star
+metadata:
+  name: sun
+spec:
+  type: G
+  location: Galaxy
+---
+apiVersion: samplecontroller.k8s.io/v1alpha1
+kind: Star
+metadata:
+  name: sunny
+spec:
+  type: G2
+  location: Galaxy2

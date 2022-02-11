@@ -19,17 +19,18 @@ limitations under the License.
 package fake
 
 import (
+	v1alpha1 "sample-controller/pkg/generated/clientset/versioned/typed/samplecontroller/v1alpha1"
+
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
-	v1alpha1 "k8s.io/sample-controller/pkg/generated/clientset/versioned/typed/samplecontroller/v1alpha1"
 )
 
 type FakeSamplecontrollerV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeSamplecontrollerV1alpha1) Foos(namespace string) v1alpha1.FooInterface {
-	return &FakeFoos{c, namespace}
+func (c *FakeSamplecontrollerV1alpha1) Stars(namespace string) v1alpha1.StarInterface {
+	return &FakeStars{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate
