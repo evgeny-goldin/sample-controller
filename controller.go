@@ -72,6 +72,7 @@ type Controller struct {
 
 	deploymentsLister appslisters.DeploymentLister
 	deploymentsSynced cache.InformerSynced
+	starInformer      informers.StarInformer
 	starLister        listers.StarLister
 	starSynced        cache.InformerSynced
 
@@ -108,56 +109,12 @@ func NewController(
 		sampleclientset:   sampleclientset,
 		deploymentsLister: deploymentInformer.Lister(),
 		deploymentsSynced: deploymentInformer.Informer().HasSynced,
+		starInformer:      starInformer,
 		starLister:        starInformer.Lister(),
 		starSynced:        starInformer.Informer().HasSynced,
 		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Stars"),
 		recorder:          recorder,
 	}
-
-	listStars := func() {
-		stars, err := controller.starLister.Stars("").List(labels.Everything())
-		if err != nil {
-			klog.Error(err)
-		}
-
-		klog.Infof("We have %d star(s) so far", len(stars))
-		for j, star := range stars {
-			klog.Infof("#%d - Name: %q, Location: %q, Type: %q", j+1, star.Name, star.Spec.Location, star.Spec.Type)
-		}
-	}
-
-	klog.Info("Setting up event handlers")
-	// Set up an event handler for when resources change
-
-	starInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			klog.Infoln("AddFunc")
-			if star, ok := obj.(*samplev1alpha1.Star); ok {
-				klog.Infof("Star is added: location %q, type %q\n", star.Spec.Location, star.Spec.Type)
-			}
-			listStars()
-		},
-		UpdateFunc: func(old, new interface{}) {
-			klog.Infoln("UpdateFunc")
-			starNew, okNew := new.(*samplev1alpha1.Star)
-			starOld, okOld := old.(*samplev1alpha1.Star)
-			starIsUpdated := okNew && okOld &&
-				((starNew.Spec.Location != starOld.Spec.Location) || (starNew.Spec.Type != starOld.Spec.Type))
-			if starIsUpdated {
-				klog.Infof("Star is updated: location %q => %q, type %q => %q\n",
-					starOld.Spec.Location, starNew.Spec.Location,
-					starOld.Spec.Type, starNew.Spec.Type)
-			}
-			listStars()
-		},
-		DeleteFunc: func(obj interface{}) {
-			klog.Infoln("DeleteFunc")
-			if star, ok := obj.(*samplev1alpha1.Star); ok {
-				klog.Infof("Star is deleted: location %q, type %q\n", star.Spec.Location, star.Spec.Type)
-			}
-			listStars()
-		},
-	})
 
 	// Set up an event handler for when Deployment resources change. This
 	// handler will lookup the owner of the given Deployment, and if it is
@@ -193,6 +150,56 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 
 	// Start the informer factories to begin populating the informer caches
 	klog.Info("Starting controller")
+
+	listStars := func() {
+		stars, err := c.starLister.Stars("").List(labels.Everything())
+		if err != nil {
+			klog.Error(err)
+		}
+
+		s := "s"
+		if len(stars) == 1 {
+			s = ""
+		}
+
+		klog.Infof("We have %d star%s so far", len(stars), s)
+		for j, star := range stars {
+			klog.Infof("#%d - Name: %q, Location: %q, Type: %q", j+1, star.Name, star.Spec.Location, star.Spec.Type)
+		}
+	}
+
+	klog.Info("Setting up event handlers")
+	// Set up an event handler for when resources change
+
+	c.starInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			klog.Infoln("AddFunc")
+			if star, ok := obj.(*samplev1alpha1.Star); ok {
+				klog.Infof("Star is added: location %q, type %q\n", star.Spec.Location, star.Spec.Type)
+			}
+			listStars()
+		},
+		UpdateFunc: func(old, new interface{}) {
+			klog.Infoln("UpdateFunc")
+			starNew, okNew := new.(*samplev1alpha1.Star)
+			starOld, okOld := old.(*samplev1alpha1.Star)
+			starIsUpdated := okNew && okOld &&
+				((starNew.Spec.Location != starOld.Spec.Location) || (starNew.Spec.Type != starOld.Spec.Type))
+			if starIsUpdated {
+				klog.Infof("Star is updated: location %q => %q, type %q => %q\n",
+					starOld.Spec.Location, starNew.Spec.Location,
+					starOld.Spec.Type, starNew.Spec.Type)
+			}
+			listStars()
+		},
+		DeleteFunc: func(obj interface{}) {
+			klog.Infoln("DeleteFunc")
+			if star, ok := obj.(*samplev1alpha1.Star); ok {
+				klog.Infof("Star is deleted: location %q, type %q\n", star.Spec.Location, star.Spec.Type)
+			}
+			listStars()
+		},
+	})
 
 	// Wait for the caches to be synced before starting workers
 	klog.Info("Waiting for informer caches to sync")

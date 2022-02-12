@@ -1,0 +1,7 @@
+#defaultBaseImage: debian:bullseye
+defaultBaseImage: alpine
+  
+
+# default - gcr.io/distroless/static:nonroot, no sh (20Mb) - https://github.com/GoogleContainerTools/distroless
+# alpine          - sh    (22MB)
+# debian:bullseye - bash  (70Mb)
