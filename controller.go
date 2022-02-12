@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/labels"
 	"strings"
 	"time"
 
@@ -71,8 +72,8 @@ type Controller struct {
 
 	deploymentsLister appslisters.DeploymentLister
 	deploymentsSynced cache.InformerSynced
-	starsLister       listers.StarLister
-	starsSynced       cache.InformerSynced
+	starLister        listers.StarLister
+	starSynced        cache.InformerSynced
 
 	// workqueue is a rate limited work queue. This is used to queue work to be
 	// processed instead of performing it as soon as a change happens. This
@@ -107,18 +108,54 @@ func NewController(
 		sampleclientset:   sampleclientset,
 		deploymentsLister: deploymentInformer.Lister(),
 		deploymentsSynced: deploymentInformer.Informer().HasSynced,
-		starsLister:       starInformer.Lister(),
-		starsSynced:       starInformer.Informer().HasSynced,
+		starLister:        starInformer.Lister(),
+		starSynced:        starInformer.Informer().HasSynced,
 		workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Stars"),
 		recorder:          recorder,
 	}
 
+	listStars := func() {
+		stars, err := controller.starLister.Stars("").List(labels.Everything())
+		if err != nil {
+			klog.Error(err)
+		}
+
+		klog.Infof("We have %d star(s) so far", len(stars))
+		for j, star := range stars {
+			klog.Infof("#%d - Name: %q, Location: %q, Type: %q", j+1, star.Name, star.Spec.Location, star.Spec.Type)
+		}
+	}
+
 	klog.Info("Setting up event handlers")
 	// Set up an event handler for when resources change
+
 	starInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.enqueueStar,
+		AddFunc: func(obj interface{}) {
+			klog.Infoln("AddFunc")
+			if star, ok := obj.(*samplev1alpha1.Star); ok {
+				klog.Infof("Star is added: location %q, type %q\n", star.Spec.Location, star.Spec.Type)
+			}
+			listStars()
+		},
 		UpdateFunc: func(old, new interface{}) {
-			controller.enqueueStar(new)
+			klog.Infoln("UpdateFunc")
+			starNew, okNew := new.(*samplev1alpha1.Star)
+			starOld, okOld := old.(*samplev1alpha1.Star)
+			starIsUpdated := okNew && okOld &&
+				((starNew.Spec.Location != starOld.Spec.Location) || (starNew.Spec.Type != starOld.Spec.Type))
+			if starIsUpdated {
+				klog.Infof("Star is updated: location %q => %q, type %q => %q\n",
+					starOld.Spec.Location, starNew.Spec.Location,
+					starOld.Spec.Type, starNew.Spec.Type)
+			}
+			listStars()
+		},
+		DeleteFunc: func(obj interface{}) {
+			klog.Infoln("DeleteFunc")
+			if star, ok := obj.(*samplev1alpha1.Star); ok {
+				klog.Infof("Star is deleted: location %q, type %q\n", star.Spec.Location, star.Spec.Type)
+			}
+			listStars()
 		},
 	})
 
@@ -159,7 +196,7 @@ func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
 
 	// Wait for the caches to be synced before starting workers
 	klog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.deploymentsSynced, c.starsSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.deploymentsSynced, c.starSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -251,7 +288,7 @@ func (c *Controller) syncHandler(key string) error {
 	}
 
 	// Get the Foo resource with this namespace/name
-	star, err := c.starsLister.Stars(namespace).Get(name)
+	star, err := c.starLister.Stars(namespace).Get(name)
 	if err != nil {
 		// The Foo resource may no longer exist, in which case we stop
 		// processing.
@@ -369,7 +406,7 @@ func (c *Controller) handleObject(obj interface{}) {
 			return
 		}
 
-		star, err := c.starsLister.Stars(object.GetNamespace()).Get(ownerRef.Name)
+		star, err := c.starLister.Stars(object.GetNamespace()).Get(ownerRef.Name)
 		if err != nil {
 			klog.V(4).Infof("ignoring orphaned object '%s' of star '%s'", object.GetSelfLink(), ownerRef.Name)
 			return
