@@ -65,10 +65,10 @@ const (
 
 // Controller is the controller implementation for Foo resources
 type Controller struct {
-	// kubeclientset is a standard kubernetes clientset
-	kubeclientset kubernetes.Interface
-	// sampleclientset is a clientset for our own API group
-	sampleclientset clientset.Interface
+	// kubeClient is a standard kubernetes clientset
+	kubeClient kubernetes.Interface
+	// starClient is a clientset for our own API group
+	starClient clientset.Interface
 
 	deploymentsLister appslisters.DeploymentLister
 	deploymentsSynced cache.InformerSynced
@@ -89,8 +89,8 @@ type Controller struct {
 
 // NewController returns a new sample controller
 func NewController(
-	kubeclientset kubernetes.Interface,
-	sampleclientset clientset.Interface,
+	kubeClient kubernetes.Interface,
+	starClient clientset.Interface,
 	deploymentInformer appsinformers.DeploymentInformer,
 	starInformer informers.StarInformer) *Controller {
 
@@ -101,12 +101,12 @@ func NewController(
 	klog.V(4).Info("Creating event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartStructuredLogging(0)
-	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
 	controller := &Controller{
-		kubeclientset:     kubeclientset,
-		sampleclientset:   sampleclientset,
+		kubeClient:        kubeClient,
+		starClient:        starClient,
 		deploymentsLister: deploymentInformer.Lister(),
 		deploymentsSynced: deploymentInformer.Informer().HasSynced,
 		starInformer:      starInformer,
@@ -311,7 +311,7 @@ func (c *Controller) syncHandler(key string) error {
 	location, err := c.deploymentsLister.Deployments(star.Namespace).Get(star.Spec.Location)
 	// If the resource doesn't exist, we'll create it
 	if errors.IsNotFound(err) {
-		location, err = c.kubeclientset.AppsV1().Deployments(star.Namespace).Create(context.TODO(), newDeployment(star), metav1.CreateOptions{})
+		location, err = c.kubeClient.AppsV1().Deployments(star.Namespace).Create(context.TODO(), newDeployment(star), metav1.CreateOptions{})
 	}
 
 	// If an error occurs during Get/Create, we'll requeue the item so we can
@@ -357,7 +357,7 @@ func (c *Controller) updateStarStatus(star *samplev1alpha1.Star, deployment *app
 	// we must use Update instead of UpdateStatus to update the Status block of the Foo resource.
 	// UpdateStatus will not allow changes to the Spec of the resource,
 	// which is ideal for ensuring nothing other than resource status has been updated.
-	_, err := c.sampleclientset.SamplecontrollerV1alpha1().Stars(star.Namespace).UpdateStatus(context.TODO(), starCopy, metav1.UpdateOptions{})
+	_, err := c.starClient.SamplecontrollerV1alpha1().Stars(star.Namespace).UpdateStatus(context.TODO(), starCopy, metav1.UpdateOptions{})
 	return err
 }
 
